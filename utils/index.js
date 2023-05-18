@@ -2,12 +2,7 @@ const {
   hexToDecimal,
   decimalToHex,
   fromHexInLoop,
-  makeJSONRPCRequestObj,
-  makeTxCallRPCObj,
-  makeCustomCallRequestObj,
-  makeICXSendTxRequestObj,
-  makeICXCallRequestObj,
-  makeRpcCustomRequest
+  makeIcxCallRequest
 } = require("./helpers");
 
 const customRequest = require("./customRequest");
@@ -17,14 +12,9 @@ const utils = {
   hexToDecimal,
   decimalToHex,
   fromHexInLoop,
-  makeJSONRPCRequestObj,
-  makeTxCallRPCObj,
-  makeCustomCallRequestObj,
-  makeICXSendTxRequestObj,
-  makeICXCallRequestObj,
   customRequest,
   SCORES,
-  makeRpcCustomRequest
+  makeIcxCallRequest
 };
 
 module.exports = utils;

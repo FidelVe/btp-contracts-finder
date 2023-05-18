@@ -12,7 +12,7 @@ const {
   makeICXCallRequestObj,
   customRequest,
   SCORES,
-  makeRpcCustomRequest
+  makeIcxCallRequest
 } = require("./utils");
 
 // SCORE methods
@@ -224,7 +224,7 @@ void setBonderList;
 const lib = {
   getScoreApi,
   getPreps,
-  makeRpcCustomRequest
+  makeIcxCallRequest
 };
 
 module.exports = lib;
