@@ -2,7 +2,11 @@ const {
   hexToDecimal,
   decimalToHex,
   fromHexInLoop,
-  makeIcxCallRequest
+  makeIcxCallRequest,
+  makeGetScoreApiRequest,
+  makeBtpGetNetworkInfoRequest,
+  makeEthJsonRpcCall,
+  getMethodFromAbi
 } = require("./helpers");
 
 const customRequest = require("./customRequest");
@@ -14,7 +18,11 @@ const utils = {
   fromHexInLoop,
   customRequest,
   SCORES,
-  makeIcxCallRequest
+  makeIcxCallRequest,
+  makeGetScoreApiRequest,
+  makeBtpGetNetworkInfoRequest,
+  makeEthJsonRpcCall,
+  getMethodFromAbi
 };
 
 module.exports = utils;

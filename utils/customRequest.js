@@ -16,7 +16,12 @@ const http = require("http");
  * @param {number} param.timeout
  * @param {string} param.path
  */
-async function httpx(params, data = false, runSecured = true) {
+async function httpx(
+  params,
+  data = false,
+  runSecured = true,
+  useResponseEvent = false
+) {
   let method = http;
   if (runSecured) {
     method = https;
@@ -37,6 +42,19 @@ async function httpx(params, data = false, runSecured = true) {
       let rawData = "";
       res.on("data", chunk => {
         rawData += chunk;
+      });
+      // res.on("data", chunk => {
+      //   console.log("chunk: ", chunk);
+      //   rawData += chunk;
+      //   // if (typeof chunk === "string") {
+      //   //   rawData += chunk;
+      //   // } else {
+      //   //   rawData = { ...chunk };
+      //   // }
+      // });
+
+      res.on("response", response => {
+        console.log("response: ", response);
       });
 
       // for (let item in res.headers) {
@@ -102,7 +120,8 @@ async function customRequest(
   data = false,
   hostname,
   https = true,
-  port = false
+  port = false,
+  useResponseEvent = false
 ) {
   let request;
   try {
@@ -116,9 +135,11 @@ async function customRequest(
       },
       port: port ? port : https ? 443 : 80
     };
-    if (data != false) {
-      params.headers["Content-Length"] = data.length;
-    }
+    // if (data != false) {
+    //   params.headers["Content-Length"] = Buffer.byteLength(
+    //     JSON.stringify(data)
+    //   );
+    // }
 
     // console.log("request");
     // console.log(params);
@@ -126,9 +147,9 @@ async function customRequest(
     // console.log(data);
     // console.log(`https: ${https}`);
     if (https) {
-      request = await httpx(params, data);
+      request = await httpx(params, data, true, useResponseEvent);
     } else {
-      request = await httpx(params, data, false);
+      request = await httpx(params, data, false, useResponseEvent);
     }
 
     return request;

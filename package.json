@@ -12,5 +12,8 @@
   "license": "ISC",
   "devDependencies": {
     "eslint": "^8.40.0"
+  },
+  "dependencies": {
+    "web3": "^1.10.0"
   }
 }

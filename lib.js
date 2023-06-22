@@ -1,230 +1,263 @@
 // lib.js
 //
-
 const {
-  // hexToDecimal,
-  // decimalToHex,
-  fromHexInLoop,
-  makeJSONRPCRequestObj,
-  makeTxCallRPCObj,
-  makeCustomCallRequestObj,
-  makeICXSendTxRequestObj,
-  makeICXCallRequestObj,
-  customRequest,
-  SCORES,
-  makeIcxCallRequest
+  makeIcxCallRequest,
+  makeBtpGetNetworkInfoRequest,
+  makeGetScoreApiRequest,
+  makeEthJsonRpcCall,
+  getMethodFromAbi
 } = require("./utils");
+const fs = require("fs");
+const Web3 = require("web3");
 
-// SCORE methods
-//
-// CPS methods
-/*
- *
- */
-async function getCPSPeriodStatus(nodeUrl) {
-  //
-  const JSONRPCObject = makeICXCallRequestObj(
-    "get_period_status",
-    null,
-    null,
-    SCORES.mainnet.cps
-  );
+function getBmcAbi() {
+  return JSON.parse(fs.readFileSync("./BMCPeriphery.json", "utf8"));
+}
 
-  const request = await customRequest(
-    SCORES.apiRoutes.v3,
-    JSONRPCObject,
-    nodeUrl
-  );
+function getBmcContract(contractAddress) {
+  const web3 = new Web3();
+  const abi = getBmcAbi().abi;
 
-  if (request == null) {
-    // Error was raised and handled inside queryMethod, the returned value
-    // is null. Here we continue returning null and let the code logic
-    // after this handle the null values in the most appropiate way depending
-    // on the code logic
-    return request;
-  } else {
-    if (request.error == null) {
-      return request.result;
-    } else {
-      return request;
+  return new web3.eth.Contract(abi, contractAddress);
+}
+
+async function getAllBtpNetworkInfo(url) {
+  try {
+    const result = [];
+    let counter = 1;
+    while (counter < 100) {
+      const response = await makeBtpGetNetworkInfoRequest(
+        url,
+        "0x" + counter.toString(16)
+      );
+      if (response.error == null && response.result != null) {
+        result.push(response.result);
+        counter++;
+      } else {
+        break;
+      }
     }
+
+    return result;
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+async function getBtpNetworkInfo(nodeUrl, networkId) {
+  try {
+    return await makeBtpGetNetworkInfoRequest(nodeUrl, networkId);
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+async function bmcGetLinks(nodeUrl, bmcContract) {
+  try {
+    return await makeIcxCallRequest(nodeUrl, bmcContract, "getLinks");
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+async function bmcGetServices(nodeUrl, bmcContract) {
+  try {
+    return await makeIcxCallRequest(nodeUrl, bmcContract, "getServices");
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+async function bmcGetVerifiers(nodeUrl, bmcContract) {
+  try {
+    return await makeIcxCallRequest(nodeUrl, bmcContract, "getVerifiers");
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+async function bmcGetBtpAddress(nodeUrl, bmcContract) {
+  try {
+    return await makeIcxCallRequest(nodeUrl, bmcContract, "getBtpAddress");
+  } catch (e) {
+    console.log(e);
   }
 }
 
 /*
  *
  */
-function voteNetworkProposal(proposalId, vote, prepAddress) {
-  return makeTxCallRPCObj(
-    prepAddress,
-    this.scores.mainnet.governance2,
-    "voteProposal",
-    {
-      id: proposalId,
-      vote: vote
-    }
-  );
-}
+async function getBtpContracts(mainNetwork, secondaryNetwork) {
+  const mainRpc = mainNetwork.rpc;
+  const secondaryRpc = secondaryNetwork.rpc;
+  const secondaryId = secondaryNetwork.chainId;
+  const secondaryChainType = secondaryNetwork.chainType;
+  try {
+    const result = {
+      main: {
+        contracts: {}
+      },
+      secondary: {
+        contracts: {}
+      }
+    };
 
-/*
- *
- */
-function approveNetworkProposal(proposalId, prepAddress) {
-  return voteNetworkProposal(proposalId, "0x1", prepAddress);
-}
+    const btpNetworkInfo = await makeBtpGetNetworkInfoRequest(mainRpc, "0x1");
 
-// Governance methods
-/*
- *
- */
-async function getScoreApi(nodeUrl, address = SCORES.mainnet.governance) {
-  //
-  const JSONRPCObject = JSON.stringify({
-    ...makeJSONRPCRequestObj("icx_getScoreApi"),
-    params: {
-      address: address
-    }
-  });
+    if (btpNetworkInfo.error == null && btpNetworkInfo.result != null) {
+      const bmcLinks = await bmcGetLinks(mainRpc, btpNetworkInfo.result.owner);
 
-  const request = await customRequest(
-    SCORES.apiRoutes.v3,
-    JSONRPCObject,
-    nodeUrl
-  );
-  if (request == null) {
-    // Error was raised and handled inside queryMethod, the returned value
-    // is null. Here we continue returning null and let the code logic
-    // after this handle the null values in the most appropiate way depending
-    // on the code logic
-    return request;
-  } else {
-    if (request.error == null) {
-      return request.result;
+      const parsedBmcLinks = {
+        networkLabels: []
+      };
+      bmcLinks.result.forEach(link => {
+        const arrayFromLink = link.split("/");
+        parsedBmcLinks.networkLabels.push(
+          arrayFromLink[arrayFromLink.length - 2]
+        );
+        parsedBmcLinks[arrayFromLink[arrayFromLink.length - 2]] = {
+          contractAddress: arrayFromLink[arrayFromLink.length - 1]
+        };
+      });
+
+      // if the provided secondary ID is not in the list of parsedBmcLinks raise error
+      if (parsedBmcLinks[secondaryId] == null) {
+        throw new Error(
+          `Secondary chain ID ${secondaryId} is not in the list of available chains: ${parsedBmcLinks.networkLabels}`
+        );
+      } else {
+        result.secondary.networkId = secondaryId;
+        result.secondary.contracts.bmc =
+          parsedBmcLinks[secondaryId].contractAddress;
+      }
+
+      const xCallAddress = await bmcGetServices(
+        mainRpc,
+        btpNetworkInfo.result.owner
+      );
+
+      const bmvContract = await bmcGetVerifiers(
+        mainRpc,
+        btpNetworkInfo.result.owner
+      );
+
+      const btpAddress = await bmcGetBtpAddress(
+        mainRpc,
+        btpNetworkInfo.result.owner
+      );
+
+      const arrayFromBtpAddress = btpAddress.result.split("/");
+
+      result.main = {
+        networkId: arrayFromBtpAddress[arrayFromBtpAddress.length - 2],
+        contracts: {
+          bmc: btpNetworkInfo.result.owner,
+          xcall: xCallAddress.result.xcall
+        }
+      };
+
+      if (bmvContract.result[secondaryId] != null) {
+        result.main.contracts.bmv = bmvContract.result[secondaryId];
+
+        if (secondaryChainType === "evm") {
+          const web3 = new Web3(secondaryRpc);
+          web3.eth.handleRevert = true;
+          const abi = getBmcAbi().abi;
+          const secondaryBmcContract = new web3.eth.Contract(
+            abi,
+            parsedBmcLinks[secondaryId].contractAddress
+          );
+
+          // obtaining xcall
+          // const xcallEncodedCall = await secondaryBmcContract.methods
+          //   .getServices()
+          //   .call()
+          //   .catch(e => {
+          //     console.error("%%%%% catches error: ", e);
+          //   });
+          // console.log("xcallEncodedCall");
+          // console.log(xcallEncodedCall);
+          //
+
+          // make call to getServices() on secondary chain
+          const xcallEncodedCall = secondaryBmcContract.methods
+            .getServices()
+            .encodeABI();
+          // console.log("xcallEncodedCall");
+          // console.log(xcallEncodedCall);
+          // const rawCall = await makeEthJsonRpcCall(
+          //   secondaryRpc,
+          //   parsedBmcLinks[secondaryId].contractAddress,
+          //   xcallEncodedCall
+          // );
+          // console.log("rawCall");
+          // console.log(rawCall);
+          const xcallResponse = await web3.eth.call({
+            to: parsedBmcLinks[secondaryId].contractAddress,
+            data: xcallEncodedCall
+          });
+          const abiMethod = getMethodFromAbi("getServices", abi);
+          const parsedResponse = web3.eth.abi.decodeParameters(
+            abiMethod.outputs,
+            xcallResponse
+          );
+          try {
+            result.secondary.contracts.xcall = parsedResponse[0][0].addr;
+          } catch (e) {}
+
+          // make call to getVerifiers() on secondary chain
+          // const verifiersEncodedCall = secondaryBmcContract.methods
+          //   .getVerifiers()
+          //   .encodeABI();
+          // const verifiersResponse = await web3.eth.call({
+          //   to: parsedBmcLinks[secondaryId].contractAddress,
+          //   data: verifiersEncodedCall
+          // });
+          // const verifiersAbiMethod = getMethodFromAbi("getVerifiers", abi);
+          // const verifiersParsedResponse = web3.eth.abi.decodeParameters(
+          //   verifiersAbiMethod.outputs,
+          //   verifiersResponse
+          // );
+          // console.log("verifiersParsedResponse");
+          // console.log(verifiersParsedResponse);
+        } else if (secondaryChainType === "goloop") {
+          throw new Error(
+            `Error: unsupported chain type "${secondaryChainType}"`
+          );
+        } else {
+          throw new Error(`Error: unknown chain type "${secondaryChainType}"`);
+        }
+        // const bmcContractTwo = getBmcContract();
+      } else {
+        throw new Error(`Error: network label "${secondaryId}" not found`);
+      }
+
+      // for (let network of parsedBmcLinks) {
+      //   console.log("network");
+      //   console.log(network);
+      // }
     } else {
-      return request;
+      throw new Error("Error getting BTP network info");
     }
+
+    return result;
+  } catch (e) {
+    console.log(e);
   }
 }
-
-/*
- *
- */
-async function getIcxBalance(nodeUrl, address, decimals = 8) {
-  const JSONRPCObject = JSON.stringify({
-    ...makeJSONRPCRequestObj("icx_getBalance"),
-    params: {
-      address: address
-    }
-  });
-
-  const request = await customRequest(
-    SCORES.apiRoutes.v3,
-    JSONRPCObject,
-    nodeUrl
-  );
-  if (request == null) {
-    // Error was raised and handled inside queryMethod, the returned value
-    // is null. Here we continue returning null and let the code logic
-    // after this handle the null values in the most appropiate way depending
-    // on the code logic
-    return request;
-  } else {
-    if (request.error == null) {
-      return Number(fromHexInLoop(request.result).toFixed(decimals));
-    } else {
-      return request;
-    }
-  }
-}
-
-/*
- *
- */
-async function getPreps(nodeUrl, height = null) {
-  const JSONRPCObject = makeICXCallRequestObj(
-    "getPReps",
-    { startRanking: "0x1" },
-    height,
-    SCORES.mainnet.governance
-  );
-  const request = await customRequest(
-    SCORES.apiRoutes.v3,
-    JSONRPCObject,
-    nodeUrl
-  );
-  if (request == null) {
-    // Error was raised and handled inside queryMethod, the returned value
-    // is null. Here we continue returning null and let the code logic
-    // after this handle the null values in the most appropiate way depending
-    // on the code logic
-    return request;
-  } else {
-    if (request.error == null) {
-      return request.result;
-    } else {
-      return request;
-    }
-  }
-}
-
-/*
- *
- */
-async function getPrep(nodeUrl, prepAddress) {
-  //
-  const JSONRPCObject = makeICXCallRequestObj(
-    "getPRep",
-    { address: prepAddress },
-    null,
-    SCORES.mainnet.governance
-  );
-
-  const request = await customRequest(
-    SCORES.apiRoutes.v3,
-    JSONRPCObject,
-    nodeUrl
-  );
-  if (request == null) {
-    // Error was raised and handled inside queryMethod, the returned value
-    // is null. Here we continue returning null and let the code logic
-    // after this handle the null values in the most appropiate way depending
-    // on the code logic
-    return request;
-  } else {
-    if (request.error == null) {
-      return request.result;
-    } else {
-      return request;
-    }
-  }
-}
-
-/*
- *
- */
-function setBonderList(prepAddress, arrayOfBonderAddresses) {
-  return makeTxCallRPCObj(
-    prepAddress,
-    SCORES.mainnet.governance,
-    "setBonderList",
-    {
-      bonderList: [...arrayOfBonderAddresses]
-    }
-  );
-}
-
-void getCPSPeriodStatus;
-void approveNetworkProposal;
-void getScoreApi;
-void getIcxBalance;
-void getPreps;
-void getPrep;
-void setBonderList;
 
 const lib = {
-  getScoreApi,
-  getPreps,
-  makeIcxCallRequest
+  makeIcxCallRequest,
+  makeGetScoreApiRequest,
+  makeBtpGetNetworkInfoRequest,
+  getAllBtpNetworkInfo,
+  bmcGetLinks,
+  bmcGetServices,
+  bmcGetVerifiers,
+  getBtpContracts,
+  bmcGetBtpAddress,
+  getBmcAbi,
+  getBmcContract
 };
 
 module.exports = lib;
