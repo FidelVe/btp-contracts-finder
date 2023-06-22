@@ -1,15 +1,6 @@
-const {
-  makeGetScoreApiRequest,
-  getAllBtpNetworkInfo,
-  bmcGetLinks,
-  bmcGetServices,
-  bmcGetVerifiers,
-  bmcGetBtpAddress,
-  getBtpContracts,
-  getBmcContract
-} = require("./lib");
+const { getBtpContracts, RESULT_PATH } = require("./lib");
+const fs = require("fs");
 
-// const nodeUrl = "https://server02.espanicon.team/api/v3";
 const testData = {
   icon1: {
     rpc: "https://server02.espanicon.team/api/v3",
@@ -34,42 +25,14 @@ const testData = {
 };
 
 async function main() {
-  const nodeUrl = testData.icon1.rpc;
-  // const r1 = await getAllBtpNetworkInfo(
-  //   nodeUrl
-  //   // "https://berlin.net.solidwallet.io/api/v3/icon_dex"
-  // );
-  // console.log("## Registered BTP Network Info for all networks");
-  // console.log(r1);
-
-  // const r3 = await makeGetScoreApiRequest(nodeUrl, r1[0].owner);
-  // console.log("## BMC ABI");
-  // console.log(r3);
-
-  // const r2 = await bmcGetLinks(nodeUrl, r1[1].owner);
-  // console.log("## BMC Links");
-  // console.log(r2);
-
-  // const r4 = await bmcGetServices(nodeUrl, r1[1].owner);
-  // console.log("## BMC Services");
-  // console.log(r4);
-
-  // const r5 = await bmcGetVerifiers(nodeUrl, r1[1].owner);
-  // console.log("## BMC Verifiers");
-  // console.log(r5);
-
-  // const r6 = await bmcGetBtpAddress(nodeUrl, r1[1].owner);
-  // console.log("## BMC BTP Address");
-  // console.log(r6);
-
-  const r7 = await getBtpContracts(testData.icon1, testData.eth1);
-  console.log("## BTP Contracts");
-  console.log(r7);
-}
-
-async function main2() {
-  const r = getBmcContract("0x0a5a8d0d397a8e9f9f67d7d622f4f1c3b0e1a2d2");
-  console.log(r);
+  try {
+    await getBtpContracts(testData.icon1, testData.eth1);
+    console.log("## BTP Contracts:");
+    console.log(fs.readFileSync(RESULT_PATH).toString());
+  } catch (e) {
+    console.log("Error fetching BTP contracts");
+    console.error(e);
+  }
 }
 
 main();

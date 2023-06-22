@@ -9,6 +9,7 @@ const {
 } = require("./utils");
 const fs = require("fs");
 const Web3 = require("web3");
+const RESULT_PATH = "./btpNetworkInfo.json";
 
 function getBmcAbi() {
   return JSON.parse(fs.readFileSync("./BMCPeriphery.json", "utf8"));
@@ -84,6 +85,16 @@ async function bmcGetBtpAddress(nodeUrl, bmcContract) {
   }
 }
 
+function updateLocalBtpNetworkInfoFile(networkInfo) {
+  try {
+    if (fs.existsSync(RESULT_PATH)) {
+      fs.unlinkSync(RESULT_PATH);
+    }
+    fs.writeFileSync(RESULT_PATH, JSON.stringify(networkInfo));
+  } catch (e) {
+    console.log("Error updating local btpNetworkInfo.json file: ", e);
+  }
+}
 /*
  *
  */
@@ -92,16 +103,15 @@ async function getBtpContracts(mainNetwork, secondaryNetwork) {
   const secondaryRpc = secondaryNetwork.rpc;
   const secondaryId = secondaryNetwork.chainId;
   const secondaryChainType = secondaryNetwork.chainType;
+  const result = {
+    main: {
+      contracts: {}
+    },
+    secondary: {
+      contracts: {}
+    }
+  };
   try {
-    const result = {
-      main: {
-        contracts: {}
-      },
-      secondary: {
-        contracts: {}
-      }
-    };
-
     const btpNetworkInfo = await makeBtpGetNetworkInfoRequest(mainRpc, "0x1");
 
     if (btpNetworkInfo.error == null && btpNetworkInfo.result != null) {
@@ -203,23 +213,12 @@ async function getBtpContracts(mainNetwork, secondaryNetwork) {
           );
           try {
             result.secondary.contracts.xcall = parsedResponse[0][0].addr;
-          } catch (e) {}
-
-          // make call to getVerifiers() on secondary chain
-          // const verifiersEncodedCall = secondaryBmcContract.methods
-          //   .getVerifiers()
-          //   .encodeABI();
-          // const verifiersResponse = await web3.eth.call({
-          //   to: parsedBmcLinks[secondaryId].contractAddress,
-          //   data: verifiersEncodedCall
-          // });
-          // const verifiersAbiMethod = getMethodFromAbi("getVerifiers", abi);
-          // const verifiersParsedResponse = web3.eth.abi.decodeParameters(
-          //   verifiersAbiMethod.outputs,
-          //   verifiersResponse
-          // );
-          // console.log("verifiersParsedResponse");
-          // console.log(verifiersParsedResponse);
+          } catch (e) {
+            console.log(e);
+            throw new Error(
+              `Error: unable to obtain xcall address from secondary chain ${secondaryId}`
+            );
+          }
         } else if (secondaryChainType === "goloop") {
           throw new Error(
             `Error: unsupported chain type "${secondaryChainType}"`
@@ -227,23 +226,20 @@ async function getBtpContracts(mainNetwork, secondaryNetwork) {
         } else {
           throw new Error(`Error: unknown chain type "${secondaryChainType}"`);
         }
-        // const bmcContractTwo = getBmcContract();
       } else {
         throw new Error(`Error: network label "${secondaryId}" not found`);
       }
-
-      // for (let network of parsedBmcLinks) {
-      //   console.log("network");
-      //   console.log(network);
-      // }
     } else {
       throw new Error("Error getting BTP network info");
     }
 
-    return result;
+    // return result;
   } catch (e) {
+    console.log("Error fetching BTP contracts");
     console.log(e);
+    return null;
   }
+  updateLocalBtpNetworkInfoFile(result);
 }
 
 const lib = {
@@ -257,7 +253,8 @@ const lib = {
   getBtpContracts,
   bmcGetBtpAddress,
   getBmcAbi,
-  getBmcContract
+  getBmcContract,
+  RESULT_PATH
 };
 
 module.exports = lib;
